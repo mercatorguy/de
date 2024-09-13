@@ -23,13 +23,18 @@ int main()
 {
     const int num_evals = 3 * 1000 * 1000;
     const int num_dims = 50;
+    float lb[num_dims], ub[num_dims];
+    for ( size_t i=0; i<num_dims; ++i ) {
+        lb[i] = -2.f;
+        ub[i] = 2.f;
+    }
 
     // Initialise an optimiser for the 50 dimension rosenbrock function
     de_optimiser *opt = de_init(&(de_settings){
         .dimension_count = num_dims,
         .population_count = 100,
-        .lower_bound = -2.0f,
-        .upper_bound = 2.0f,
+        .lower_bound = lb,
+        .upper_bound = ub,
         .random_seed = 42,
     });
 
@@ -56,7 +61,8 @@ int main()
         de_tell(opt, id, candidate, fitness);
 
         // Query the current best fitness score
-        float best_fitness = de_best(opt, NULL);
+        float best_fitness;
+        de_best(opt, &best_fitness, NULL);
 
         // Every 100k evals, print the best fitness
         if (i % 100000 == 0)
@@ -66,7 +72,8 @@ int main()
     }
 
     // Now we're done, we also query the best candidate solution and print it out
-    float best_fitness = de_best(opt, candidate);
+    float best_fitness;
+    de_best(opt, &best_fitness, candidate);
 
     printf("\nFound solution at:\n");
     for (int i = 0; i < num_dims; i++)

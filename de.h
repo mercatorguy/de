@@ -29,8 +29,8 @@ typedef struct de_settings
 {
     int dimension_count;  // Number of dimensions in the optimisation problem
     int population_count; // Number of agents in the population
-    float lower_bound;    // Lower bound of the search space (same in all dimensions)
-    float upper_bound;    // Upper bound of the search space (same in all dimensions)
+    float *lower_bound;    // Lower bound of the search space (same in all dimensions)
+    float *upper_bound;    // Upper bound of the search space (same in all dimensions)
     int random_seed;      // Seed for the optimiser's pseudo random number generator
 } de_settings;
 
@@ -38,8 +38,8 @@ typedef struct de_optimiser
 {
     int dimension_count;  // Number of dimensions in the optimisation problem
     int population_count; // Number of agents in the population
-    float lower_bound;    // Lower bound of the search space (same in all dimensions)
-    float upper_bound;    // Upper bound of the search space (same in all dimensions)
+    float *lower_bound;    // Lower bounds of the search space
+    float *upper_bound;    // Upper bounds of the search space
     int best;             // Index of the agent with the lowest fitness
 
     float *crossover_probs;      // Per-agent crossover probability params (population_count)
@@ -60,7 +60,7 @@ void de_tell(de_optimiser *opt, int id, const float *candidate, float fitness);
 
 // Query the optimiser for the current best fitness and corresponding candidate solution. You
 // may optionall pass in NULL to out_candidate if you just want the minimum fitness.
-float de_best(de_optimiser *opt, float *out_candidate);
+int de_best(de_optimiser *opt, float *val, float *out_candidate);
 
 // Free the optimiser and its memory pools
 void de_deinit(de_optimiser *opt);
@@ -110,8 +110,11 @@ de_optimiser *de_init(de_settings *settings)
 {
     const int dimension_count = settings->dimension_count;
     const int population_count = settings->population_count;
-    const float lower_bound = settings->lower_bound;
-    const float upper_bound = settings->upper_bound;
+    size_t boundsz = sizeof(float) * dimension_count;
+    float *lower_bound = DE_ALLOC(boundsz);
+    memcpy(lower_bound,settings->lower_bound,boundsz);
+    float *upper_bound = DE_ALLOC(boundsz);
+    memcpy(upper_bound,settings->upper_bound,boundsz);
     const int random_seed = settings->random_seed;
 
     // Allocate the optimiser and its memory pools
@@ -159,9 +162,13 @@ de_optimiser *de_init(de_settings *settings)
     }
 
     // Initialise the candidates to random points in the search space
-    for (int i = 0; i < dimension_count * population_count; i++)
+    for (int i = 0; i < population_count; i++)
     {
-        candidates[i] = lower_bound + de__next_float(rng) * (upper_bound - lower_bound);
+        for ( int j = 0; j < dimension_count; j++ ) {
+            float lb = lower_bound[j];
+            float db = (upper_bound[j] - lower_bound[j]);
+            candidates[dimension_count*i + j] = lb + de__next_float(rng) * db;
+        }
     }
 
     // Fill out the optimiser struct and return the pointer to it
@@ -170,7 +177,7 @@ de_optimiser *de_init(de_settings *settings)
         .population_count = population_count,
         .lower_bound = lower_bound,
         .upper_bound = upper_bound,
-        .best = 0,
+        .best = -1,
 
         .crossover_probs = crossover_probs,
         .differential_weights = differential_weights,
@@ -190,9 +197,18 @@ int de_ask(de_optimiser *opt, float *out_candidate)
 
     // Randomly choose an id and three nearby ids
     int x_id = de__next(opt->rng) % population_count;
-    int a_id = (x_id + de__next(opt->rng) % neighbour_radius) % population_count;
-    int b_id = (x_id + de__next(opt->rng) % neighbour_radius) % population_count;
-    int c_id = (x_id + de__next(opt->rng) % neighbour_radius) % population_count;
+    int a_id = x_id; 
+    while ( x_id == a_id ) {
+        a_id = (x_id + de__next(opt->rng) % neighbour_radius) % population_count;
+    }
+    int b_id = a_id;
+    while ( x_id == b_id || a_id == b_id ) {
+        b_id = (x_id + de__next(opt->rng) % neighbour_radius) % population_count;
+    }
+    int c_id = b_id;
+    while ( x_id == c_id || a_id == c_id || b_id == c_id ) {
+        c_id = (x_id + de__next(opt->rng) % neighbour_radius) % population_count;
+    }
 
     // Get the crossover params for x
     float crossover_prob = opt->crossover_probs[x_id];
@@ -218,6 +234,8 @@ int de_ask(de_optimiser *opt, float *out_candidate)
         {
             out_candidate[i] = x[i];
         }
+        if ( opt->lower_bound[i] > out_candidate[i] ) out_candidate[i] = opt->lower_bound[i];
+        if ( opt->upper_bound[i] < out_candidate[i] ) out_candidate[i] = opt->upper_bound[i];
     }
 
     return x_id;
@@ -232,7 +250,8 @@ void de_tell(de_optimiser *opt, int id, const float *candidate, float fitness)
         // Replace this individual with the candidate
         memcpy(&opt->candidates[id * dimension_count], candidate, sizeof(float) * dimension_count);
         opt->fitnesses[id] = fitness;
-        opt->best = (fitness < opt->fitnesses[opt->best]) ? id : opt->best;
+        if ( -1 == opt->best ) opt->best = id;
+        else opt->best = (fitness < opt->fitnesses[opt->best]) ? id : opt->best;
     }
     else
     {
@@ -242,17 +261,17 @@ void de_tell(de_optimiser *opt, int id, const float *candidate, float fitness)
     }
 }
 
-float de_best(de_optimiser *opt, float *out_candidate)
+int de_best(de_optimiser *opt, float *val, float *out_candidate)
 {
     const int dimension_count = opt->dimension_count;
     const int candidate_bytes = sizeof(float) * dimension_count;
 
-    if (out_candidate)
-    {
-        memcpy(out_candidate, &opt->candidates[opt->best * dimension_count], candidate_bytes);
+    if ( -1 != opt->best ) {
+        if (out_candidate) memcpy(out_candidate, &opt->candidates[opt->best * dimension_count], candidate_bytes);
+        if ( val ) *val = opt->fitnesses[opt->best];
     }
-
-    return opt->fitnesses[opt->best];
+    
+    return opt->best;
 }
 
 void de_deinit(de_optimiser *opt)
