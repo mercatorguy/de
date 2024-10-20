@@ -29,8 +29,9 @@ typedef struct de_settings
 {
     int dimension_count;  // Number of dimensions in the optimisation problem
     int population_count; // Number of agents in the population
-    float *lower_bound;    // Lower bound of the search space (same in all dimensions)
-    float *upper_bound;    // Upper bound of the search space (same in all dimensions)
+    float *lower_bound;   // Lower bounds of the search space
+    float *upper_bound;   // Upper bounds of the search space
+    int *int_dims;        // Integer dimention indexes 
     int random_seed;      // Seed for the optimiser's pseudo random number generator
 } de_settings;
 
@@ -38,8 +39,9 @@ typedef struct de_optimiser
 {
     int dimension_count;  // Number of dimensions in the optimisation problem
     int population_count; // Number of agents in the population
-    float *lower_bound;    // Lower bounds of the search space
-    float *upper_bound;    // Upper bounds of the search space
+    float *lower_bound;   // Lower bounds of the search space
+    float *upper_bound;   // Upper bounds of the search space
+    int *int_dims;        // Integer dimention indexes 
     int best;             // Index of the agent with the lowest fitness
 
     float *crossover_probs;      // Per-agent crossover probability params (population_count)
@@ -115,6 +117,8 @@ de_optimiser *de_init(de_settings *settings)
     memcpy(lower_bound,settings->lower_bound,boundsz);
     float *upper_bound = DE_ALLOC(boundsz);
     memcpy(upper_bound,settings->upper_bound,boundsz);
+    int *int_dims = DE_ALLOC(boundsz);
+    memcpy(int_dims,settings->int_dims,boundsz);
     const int random_seed = settings->random_seed;
 
     // Allocate the optimiser and its memory pools
@@ -131,6 +135,9 @@ de_optimiser *de_init(de_settings *settings)
         DE_FREE(differential_weights);
         DE_FREE(fitnesses);
         DE_FREE(candidates);
+        DE_FREE(lower_bound);
+        DE_FREE(upper_bound);
+        DE_FREE(int_dims);
         return NULL;
     }
 
@@ -177,6 +184,7 @@ de_optimiser *de_init(de_settings *settings)
         .population_count = population_count,
         .lower_bound = lower_bound,
         .upper_bound = upper_bound,
+        .int_dims = int_dims,
         .best = -1,
 
         .crossover_probs = crossover_probs,
@@ -234,6 +242,7 @@ int de_ask(de_optimiser *opt, float *out_candidate)
         {
             out_candidate[i] = x[i];
         }
+        if ( opt->int_dims[i] ) out_candidate[i] = nearbyint(out_candidate[i]);
         if ( opt->lower_bound[i] > out_candidate[i] ) out_candidate[i] = opt->lower_bound[i];
         if ( opt->upper_bound[i] < out_candidate[i] ) out_candidate[i] = opt->upper_bound[i];
     }
@@ -280,6 +289,9 @@ void de_deinit(de_optimiser *opt)
     DE_FREE(opt->differential_weights);
     DE_FREE(opt->fitnesses);
     DE_FREE(opt->candidates);
+    DE_FREE(opt->lower_bound);
+    DE_FREE(opt->upper_bound);
+    DE_FREE(opt->int_dims);
     DE_FREE(opt);
 }
 
