@@ -199,7 +199,7 @@ de_optimiser *de_init(de_settings *settings)
 
 int de_ask(de_optimiser *opt, float *out_candidate)
 {
-    const int neighbour_radius = 8;
+    const int neighbour_radius = 5;
     const int population_count = opt->population_count;
     const int dimension_count = opt->dimension_count;
 
