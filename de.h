@@ -243,8 +243,8 @@ int de_ask(de_optimiser *opt, float *out_candidate)
             out_candidate[i] = x[i];
         }
         if ( opt->int_dims[i] ) out_candidate[i] = nearbyint(out_candidate[i]);
-        if ( opt->lower_bound[i] > out_candidate[i] ) out_candidate[i] = opt->lower_bound[i];
-        if ( opt->upper_bound[i] < out_candidate[i] ) out_candidate[i] = opt->upper_bound[i];
+        if ( opt->lower_bound[i] > out_candidate[i] ) out_candidate[i] = NAN;
+        if ( opt->upper_bound[i] < out_candidate[i] ) out_candidate[i] = NAN;
     }
 
     return x_id;
